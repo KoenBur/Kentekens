@@ -464,9 +464,69 @@
 
   input.addEventListener('input', () => {
     const raw = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
-    // Don't reformat while typing, just uppercase
     input.value = input.value.toUpperCase()
   })
+
+  function fetchCarImage(brand, model) {
+    const imageEl = document.getElementById('car-image')
+    const loadingEl = document.getElementById('image-loading')
+    
+    let imageUrl = null
+    
+    // Search query is brand + model
+    let searchQuery = (model).trim()
+    
+    // Try multiple sources in order (Wikipedia first)
+    const tryNextSource = async () => {
+      // Source 1: Wikipedia API (has great car images)
+      try {
+        const response = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchQuery)}&format=json&origin=*&srlimit=1`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.query && data.query.search && data.query.search.length > 0) {
+            const title = data.query.search[0].title
+            // Get the page image
+            const imageResponse = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=pageimages|pageterms&pithumbsize=500&format=json&origin=*`)
+            if (imageResponse.ok) {
+              const imgData = await imageResponse.json()
+              for (let pageId in imgData.query.pages) {
+                if (imgData.query.pages[pageId].thumbnail) {
+                  imageUrl = imgData.query.pages[pageId].thumbnail.source
+                  return true
+                }
+              }
+            }
+          }
+        }
+      } catch(e) {}
+      
+      // Fallback to mystery car image
+      imageUrl = 'https://images.unsplash.com/photo-1533473359331-35acde7260c9?q=80&w=400&auto=format&fit=crop'
+      return true
+    }
+    
+    // Execute the search
+    tryNextSource().then(() => {
+      if (imageUrl) {
+        imageEl.src = imageUrl
+        
+        imageEl.onload = () => {
+          loadingEl.style.display = 'none'
+          imageEl.style.display = 'block'
+        }
+        
+        imageEl.onerror = () => {
+          // If this image fails, try the mystery fallback
+          imageEl.src = 'https://images.unsplash.com/photo-1533473359331-35acde7260c9?q=80&w=400&auto=format&fit=crop'
+          imageEl.onload = () => {
+            loadingEl.style.display = 'none'
+            imageEl.style.display = 'block'
+          }
+          imageEl.onerror = null
+        }
+      }
+    })
+  }
 
   async function lookup() {
     const raw = normalizePlate(input.value)
@@ -524,22 +584,34 @@
     const plate = formatPlate(v.kenteken || '')
     const apk = apkStatus(v.vervaldatum_apk)
     const hasRecall = v.openstaande_terugroepactie_indicator === 'Ja'
+    const modelName = `${v.merk || ''} ${v.handelsbenaming || ''}`.trim()
 
     let html = `
-      <div class="result-plate">
-        <div class="big-plate">
-          <div class="big-plate-strip">
-            <div class="stars">★★★</div>
-            <div class="nl">NL</div>
+      <div style="text-align: center; margin-bottom: 2rem;">
+        <div class="car-name" style="margin-bottom: 0.5rem;">${modelName}</div>
+        <div style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">${v.voertuigsoort || ''} · ${v.inrichting || ''} · ${v.eerste_kleur || ''}</div>
+        ${apk ? `<div class="apk-badge ${apk.cls}">⬥ APK: ${apk.label}</div>` : ''}
+      </div>
+      
+      <div style="display: flex; gap: 2rem; margin-bottom: 2rem; align-items: flex-start;">
+        <div style="flex: 1; min-width: 250px;">
+          <div style="text-align: center; position: relative; width: 100%; height: 350px;">
+            <img id="car-image" src="" alt="Car image" style="max-width: 100%; max-height: 100%; border-radius: 8px; display: none;" />
+            <div id="image-loading" style="color: var(--muted); font-size: 0.9rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">Afbeelding laden...</div>
           </div>
-          <div class="big-plate-number">${plate}</div>
         </div>
-        <div class="result-meta">
-          <div class="car-name">${v.merk || ''} ${v.handelsbenaming || ''}</div>
-          <div class="car-sub">${v.voertuigsoort || ''} · ${v.inrichting || ''} · ${v.eerste_kleur || ''}</div>
-          ${apk ? `<div class="apk-badge ${apk.cls}">⬤ APK: ${apk.label}</div>` : ''}
-        </div>
-      </div>`
+        
+        <div style="flex: 0 0 auto; width: 280px;">
+          <div style="background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem;">
+            <div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--yellow); margin-bottom: 1rem;">Basis Informatie</div>`
+    
+    html += `<div style="display: grid; gap: 1rem;">`
+    html += `<div><div style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.3rem;">Merk</div><div style="font-size: 0.95rem; color: var(--text);">${v.merk || '–'}</div></div>`
+    html += `<div><div style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.3rem;">Model</div><div style="font-size: 0.95rem; color: var(--text);">${v.handelsbenaming || '–'}</div></div>`
+    html += `<div><div style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.3rem;">Type</div><div style="font-size: 0.95rem; color: var(--text);">${v.type || '–'}</div></div>`
+    html += `<div><div style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.3rem;">Eerste Kleur</div><div style="font-size: 0.95rem; color: var(--text);">${v.eerste_kleur || '–'}</div></div>`
+    html += `<div><div style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.3rem;">Eerste Toelating</div><div style="font-size: 0.95rem; color: var(--text);">${formatDate(v.datum_eerste_toelating)}</div></div>`
+    html += `</div></div></div></div>`
 
     // Recall warning
     if (hasRecall) {
@@ -553,35 +625,7 @@
         </div>`
     }
 
-    // General info
-    html += `<div class="section"><div class="section-title">Voertuig</div><div class="data-grid">`
-    html += field('Merk', v.merk)
-    html += field('Model', v.handelsbenaming)
-    html += field('Type', v.type)
-    html += field('Uitvoering', v.uitvoering)
-    html += field('Voertuigsoort', v.voertuigsoort)
-    html += field('Inrichting', v.inrichting)
-    html += field('Eerste kleur', v.eerste_kleur)
-    html += field('Tweede kleur', v.tweede_kleur === 'Niet geregistreerd' ? null : v.tweede_kleur)
-    html += field('Aantal deuren', v.aantal_deuren)
-    html += field('Aantal zitplaatsen', v.aantal_zitplaatsen)
-    html += field('Wielen', v.aantal_wielen)
-    html += field('Europese categorie', v.europese_voertuigcategorie)
-    html += `</div></div>`
-
-    // Dates & registration
-    html += `<div class="section"><div class="section-title">Registratie</div><div class="data-grid">`
-    html += field('Eerste toelating', formatDate(v.datum_eerste_toelating))
-    html += field('Eerste NL tenaamstelling', formatDate(v.datum_eerste_tenaamstelling_in_nederland))
-    html += field('Huidige tenaamstelling', formatDate(v.datum_tenaamstelling))
-    html += field('APK vervaldatum', formatDate(v.vervaldatum_apk), true)
-    html += field('WAM verzekerd', v.wam_verzekerd)
-    html += field('Tenaamstellen mogelijk', v.tenaamstellen_mogelijk)
-    html += field('Export indicator', v.export_indicator)
-    html += field('Taxi', v.taxi_indicator)
-    html += `</div></div>`
-
-    // Technical
+    // Detailed technical info
     html += `<div class="section"><div class="section-title">Technisch</div><div class="data-grid">`
     html += field('Cilinderinhoud', v.cilinderinhoud ? `${v.cilinderinhoud} cc` : null)
     html += field('Aantal cilinders', v.aantal_cilinders)
@@ -630,6 +674,9 @@
     el.innerHTML = html
     el.style.display = 'block'
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    
+    // Fetch car image after DOM is ready
+    fetchCarImage(v.merk, v.handelsbenaming)
   }
 </script>
 </body>
