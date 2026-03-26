@@ -364,6 +364,7 @@
     @media (max-width: 500px) {
       .data-grid { grid-template-columns: 1fr 1fr; }
       .big-plate-number { font-size: 2.2rem; }
+      .results-flex { flex-direction: column !important; }
     }
   </style>
 </head>
@@ -593,7 +594,7 @@
         ${apk ? `<div class="apk-badge ${apk.cls}">⬥ APK: ${apk.label}</div>` : ''}
       </div>
       
-      <div style="display: flex; gap: 2rem; margin-bottom: 2rem; align-items: flex-start;">
+       <div style="display: flex; gap: 2rem; margin-bottom: 2rem; align-items: flex-start;" class="results-flex">
         <div style="flex: 1; min-width: 250px;">
           <div style="text-align: center; position: relative; width: 100%; height: 350px;">
             <img id="car-image" src="" alt="Car image" style="max-width: 100%; max-height: 100%; border-radius: 8px; display: none;" />
